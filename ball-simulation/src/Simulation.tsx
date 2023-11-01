@@ -5,7 +5,7 @@ import { simulateBallMotion, calculateDistance } from './util';
 import { Line, Point } from './types';
 
 const Simulation = () => {
-    const [ball, setBall] = useState({ position: { x: 50, y: 50 }, radius: 10, velocity: { x: 5, y: 2 } });
+    const [ball, setBall] = useState({ position: { x: 50, y: 50 }, radius: 10, velocity: { x: 15, y: 0 } });
     const [lines, setLines] = useState<Line[]>([]);
     const [frame, setFrame] = useState(0);
     const [ballSimulation, setBallSimulation] = useState<Point[]>([]);
@@ -18,7 +18,7 @@ const Simulation = () => {
     const xMin = -3000;
     const xMax = 3000;
     useEffect(() => {
-        let timesOfImpact = new Array(120).fill(0).map((_, t) => t * 3 + 10);
+        let timesOfImpact = new Array(120).fill(0).map((_, t) => t * 2 + 2);
         let { points, lines, impactPoints } = simulateBallMotion(ball, timesOfImpact, ball.radius, xMin, xMax);
         setBallSimulation(points);
         setImpactPoints(impactPoints);
@@ -71,7 +71,7 @@ const Simulation = () => {
             {impactPoints.map((point) => {
                 return <Ball color='red' ball={{
                     position: point,
-                    radius: 20,
+                    radius: 3,
                     velocity: { x: 0, y: 0 }
                 }} />
             })}
