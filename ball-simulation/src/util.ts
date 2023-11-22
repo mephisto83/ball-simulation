@@ -56,30 +56,17 @@ export function simulateBallMotion(ball: Ball, timesOfImpact: number[], frameRat
         // Calculate the time remaining until the next impact
         const timeUntilImpact = timeOfImpact - currentTime;
 
-        // // If this is the first iteration, or if the ball has not hit a line yet, calculate the first impact point and line
-        // if (!currentLine) {
-        //     const firstImpactPoint = calculateImpactPoint(currentBall, timeUntilImpact); // Adjusted function signature
-        //     currentLine = calculateNextLine(firstImpactPoint, -45, 45); // Example angle range from -45 to 45 degrees
-        //     impactPoints.push(firstImpactPoint);
-        // }
 
         // Simulate motion until collision with the current line
         const { positions, finalBall, impactLine } = motionUntilCollision(currentBall, timeUntilImpact, frameRate, xMin, xMax);
         if (impactLine) {
             lines.push(impactLine);
             impactPoints.push(impactLine.start);
+            impactLine.start_frame = allPositions.length;
         }
         allPositions.push(...positions);
-
-        // Calculate the impact point based on the final state of the ball
-        const impactPoint = calculateImpactPoint(finalBall, timeUntilImpact); // Adjusted function signature
-
-        // Calculate the next line based on the impact point
-        currentLine = calculateNextLine(impactPoint, -45, 45); // Example angle range from -45 to 45 degrees
-
-        // Calculate the collision response and update the ball's velocity
-        const collisionResponse = calculateCollisionResponse(finalBall, currentLine);
-        currentBall = { ...finalBall, velocity: collisionResponse };
+        impactLine.end_frame = allPositions.length;
+        currentBall = finalBall
 
         // Update the current time
         currentTime = timeOfImpact;
@@ -89,18 +76,22 @@ export function simulateBallMotion(ball: Ball, timesOfImpact: number[], frameRat
 }
 
 
-function calculateNextLine(impactPoint: Point, length: number = 12, ballRadius: number): Line {
+function getLength(line: Line): number {
+    const dx = line.end.x - line.start.x;
+    const dy = line.end.y - line.start.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+function calculateNextLine_old(impactPoint: Point, length: number = 12, ballRadius: number): Line {
     // Define a range for horizontal angles
-    const minAngle = -45;
-    const maxAngle = 45;
+    const minAngle = -0;  // Use -90 to 90 degrees to create a more horizontal line
+    const maxAngle = 0;
 
     // Convert angles to radians for mathematical calculations
     const minAngleRad = (minAngle * Math.PI) / 180;
     const maxAngleRad = (maxAngle * Math.PI) / 180;
 
-    // Generate a random angle between minAngle and maxAngle
-    // Adding Math.PI ensures the angle is closer to the horizontal direction
-    const angle = Math.PI + minAngleRad + Math.random() * (maxAngleRad - minAngleRad);
+    // Generate a random angle within the horizontal range
+    const angle = minAngleRad + 0 * (maxAngleRad - minAngleRad);
 
     // Calculate the vector for half of the line length in the direction of the angle
     const halfLineVector: Point = {
@@ -108,13 +99,16 @@ function calculateNextLine(impactPoint: Point, length: number = 12, ballRadius: 
         y: (length / 2) * Math.sin(angle),
     };
 
-    // Calculate offset based on ball radius
+    // Calculate offset based on ball radius to move line away from the ball
+    const offsetDistance = ballRadius + 1;  // Additional 1 unit to ensure separation from ball's edge
+    const offsetAngle = angle + Math.PI / 2;  // Perpendicular to the line's direction
+
     const offset: Point = {
-        x: ballRadius * Math.cos(angle + Math.PI / 2),
-        y: ballRadius * Math.sin(angle + Math.PI / 2),
+        x: offsetDistance * Math.cos(offsetAngle),
+        y: offsetDistance * Math.sin(offsetAngle),
     };
 
-    // Calculate the start and end points of the line
+    // Calculate the start and end points of the line ensuring they are outside the ball's circumference
     const startPoint: Point = {
         x: impactPoint.x - halfLineVector.x + offset.x,
         y: impactPoint.y - halfLineVector.y + offset.y,
@@ -133,6 +127,40 @@ function calculateNextLine(impactPoint: Point, length: number = 12, ballRadius: 
     return line;
 }
 
+function calculateNextLine(
+    impactPoint: Point,
+    ballVelocity: Point,
+    lineLength: number = 12,
+    ballRadius: number
+): Line {
+    // Calculate half the line length to determine start and end points
+    const halfLineLength = lineLength / 2;
+
+    // Determine if the ball is moving up or down
+    const isMovingDown = ballVelocity.y > 0;
+
+    // Calculate the offset based on ball radius and direction of movement
+    const offsetDistance = ballRadius + 1; // Additional 1 unit to ensure separation from ball's edge
+    const yOffset = isMovingDown ? offsetDistance : -offsetDistance;
+
+    // Calculate the start and end points of the horizontal line
+    const startPoint: Point = {
+        x: impactPoint.x - halfLineLength,
+        y: impactPoint.y + yOffset
+    };
+    const endPoint: Point = {
+        x: impactPoint.x + halfLineLength,
+        y: impactPoint.y + yOffset
+    };
+
+    // Create the line segment based on the calculated start and end points
+    const line: Line = {
+        start: startPoint,
+        end: endPoint
+    };
+
+    return line;
+}
 
 function calculateLineAngle(ball: Ball): number {
     // Calculate the angle of the ball's velocity vector in degrees
@@ -182,13 +210,31 @@ function motionUntilCollision(
     }
 
     // Now that time has elapsed, create an impact line at the ball's current position
-    const angle = calculateLineAngle(currentBall); // This function needs to be implemented
-    const impactLine = calculateNextLine(currentBall.position, lineLength, currentBall.radius);
+    const impactLine = calculateNextLine(currentBall.position,
+        calculateDirectionVector(currentBall.velocity),
+        lineLength, currentBall.radius);
 
     // Update ball's velocity based on collision with the impact line
     currentBall.velocity = calculateCollisionResponse(currentBall, impactLine);
 
     return { positions, finalBall: currentBall, impactLine };
+}
+function calculateDirectionVector(velocity: Point): Point {
+    // Calculate the magnitude (length) of the velocity vector
+    const magnitude = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
+
+    // Avoid division by zero if velocity is a zero vector
+    if (magnitude === 0) {
+        return { x: 0, y: 0 };
+    }
+
+    // Normalize the velocity vector to get the direction vector
+    const directionVector: Point = {
+        x: velocity.x / magnitude,
+        y: velocity.y / magnitude
+    };
+
+    return directionVector;
 }
 
 function calculateImpactPoint(ball: Ball, timeOfImpact: number): Point {
